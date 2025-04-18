@@ -40,5 +40,5 @@ module load openmpi  # Example command for HPC environments
    pip install -r requirements.txt
    ```
 
-If you encounter issues, please refer to the Troubleshooting section below or consult the project documentation.
+Note that one of the package requirements is the illustris_python package which is included in the git repository of this module but for which further documentation can be obtained on the original git repository [here](https://github.com/illustristng/illustris_python). 
 

@@ -38,10 +38,10 @@ def treeOffsets(basePath, snapNum, id, treeName):
     # old or new format
     if 'fof_subhalo' in gcPath(basePath, snapNum) or treeName == "SubLink_gal":
         # load groupcat chunk offsets from separate 'offsets_nnn.hdf5' files
-        with h5py.File(offsetPath(basePath, snapNum), 'r') as f:
+        with h5py.File(offsetPath(snapNum), 'r') as f:
             groupFileOffsets = f['FileOffsets/Subhalo'][()]
 
-        offsetFile = offsetPath(basePath, snapNum)
+        offsetFile = offsetPath(snapNum)
         prefix = 'Subhalo/' + treeName + '/'
 
         groupOffset = id

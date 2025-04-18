@@ -165,7 +165,7 @@ def getSnapOffsets(basePath, snapNum, id, type):
     # old or new format
     if 'fof_subhalo' in gcPath(basePath, snapNum):
         # use separate 'offsets_nnn.hdf5' files
-        with h5py.File(offsetPath(basePath, snapNum), 'r') as f:
+        with h5py.File(offsetPath(snapNum), 'r') as f:
             groupFileOffsets = f['FileOffsets/'+type][()]
             r['snapOffsets'] = np.transpose(f['FileOffsets/SnapByType'][()])  # consistency
     else:
@@ -185,7 +185,7 @@ def getSnapOffsets(basePath, snapNum, id, type):
 
     # old or new format: load the offset (by type) of this group/subgroup within the snapshot
     if 'fof_subhalo' in gcPath(basePath, snapNum):
-        with h5py.File(offsetPath(basePath, snapNum), 'r') as f:
+        with h5py.File(offsetPath(snapNum), 'r') as f:
             r['offsetType'] = f[type+'/SnapByType'][id, :]
 
             # add TNG-Cluster specific offsets if present

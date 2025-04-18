@@ -19,10 +19,9 @@ def gcPath(basePath, snapNum, chunkNum=0):
     return filePath2
 
 
-def offsetPath(basePath, snapNum):
+def offsetPath(snapNum):
     """ Return absolute path to a separate offset file (modify as needed). """
-    offsetPath = '/cosma7/data/dp012/dc-butt3/MergerTrees/output/Galaxies/FABLE/Fid_test/offsets/offsets_%03d.hdf5' % snapNum
-    #offsetPath = basePath + '/../postprocessing/offsets/offsets_%03d.hdf5' % snapNum
+    offsetPath = '/cosma7/data/dp012/dc-butt3/FABLE_100_offsets/offsets_%03d.hdf5' % snapNum
 
     return offsetPath
 
@@ -137,15 +136,18 @@ def loadSingle(basePath, snapNum, haloID=-1, subhaloID=-1):
     gName = "Subhalo" if subhaloID >= 0 else "Group"
     searchID = subhaloID if subhaloID >= 0 else haloID
 
-    # old or new format
-    if 'fof_subhalo' in gcPath(basePath, snapNum):
-        # use separate 'offsets_nnn.hdf5' files
-        with h5py.File(offsetPath(basePath, snapNum), 'r') as f:
-            offsets = f['FileOffsets/'+gName][()]
-    else:
-        # use header of group catalog
-        with h5py.File(gcPath(basePath, snapNum), 'r') as f:
-            offsets = f['Header'].attrs['FileOffsets_'+gName]
+    with h5py.File(offsetPath(snapNum), 'r') as f:
+        offsets = f['FileOffsets/'+gName][()]
+
+    # # old or new format
+    # if 'fof_subhalo' in gcPath(basePath, snapNum): # this is the one we want for FABLE
+    #     # use separate 'offsets_nnn.hdf5' files
+    #     with h5py.File(offsetPath(snapNum), 'r') as f:
+    #         offsets = f['FileOffsets/'+gName][()]
+    # else:
+    #     # use header of group catalog
+    #     with h5py.File(gcPath(basePath, snapNum), 'r') as f:
+    #         offsets = f['Header'].attrs['FileOffsets_'+gName]
 
     offsets = searchID - offsets
     fileNum = np.max(np.where(offsets >= 0))

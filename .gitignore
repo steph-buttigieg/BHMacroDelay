@@ -1,0 +1,8 @@
+# Ignore the data and figures folders
+data/*
+figures/*
+slurm_output/*
+
+# Track the src folder
+!src/
+!submission_scripts/
