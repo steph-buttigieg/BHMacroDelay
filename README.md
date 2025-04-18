@@ -1,4 +1,4 @@
-This package processes BH mergers in the cosmological simulation FABLE (link to data repository of FABLE ideally) and generates macrophysical time delays according to the method described in Buttigieg et al. (2025) (link to paper). 
+This package processes BH mergers in the cosmological simulation FABLE (link to data repository of FABLE ideally) and generates macrophysical time delays according to the method described in Buttigieg et al. (2025) (link to paper). Note that the package is still in development and does not currently implement the full functionality.
 
 # Installation Guide
 
