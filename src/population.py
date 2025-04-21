@@ -91,8 +91,7 @@ def generate_mass_data_parallel(redshift, total_mass=False, verbose=False):
         subhalo_data = gc.loadSubhalos(basepath, snap, fields=[mass_field, 'SubhaloLenType'])
         subhalo_masses = subhalo_data[mass_field][:, 4]
         subhalo_bh_count = subhalo_data['SubhaloLenType'][:, 5] # number of BHs in each subhalo
-        halo_data = gc.loadHalos(basepath, snap, fields=['GroupFirstSub'])
-        first_subs = halo_data['GroupFirstSub']
+        first_subs = gc.loadHalos(basepath, snap, fields=['GroupFirstSub'])
     else:
         snap = None
         n_groups = None
@@ -160,5 +159,6 @@ def generate_mass_data_parallel(redshift, total_mass=False, verbose=False):
 
 
 if __name__ == '__main__':
-    redshift = 0
-    generate_mass_data_parallel(redshift=redshift, total_mass=False, verbose=False)
+    redshifts = [0, 2, 4]
+    for redshift in redshifts:
+        generate_mass_data_parallel(redshift=redshift, total_mass=True, verbose=False)
