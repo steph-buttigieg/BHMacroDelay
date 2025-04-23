@@ -3,6 +3,11 @@ This script investigates the mass relation between the stellar mass and the cent
 Data is saved to a text file and the mass_relation.ipynb notebook is used to plot the data.
 
 This script requires access to the full FABLE snapshots.
+
+------------------------------------------------------------------------------------------------
+
+Stephanie Buttigieg (sb2583@cam.ac.uk)
+
 """
 import utils as util 
 import numpy as np
@@ -91,8 +96,7 @@ def generate_mass_data_parallel(redshift, total_mass=False, verbose=False):
         subhalo_data = gc.loadSubhalos(basepath, snap, fields=[mass_field, 'SubhaloLenType'])
         subhalo_masses = subhalo_data[mass_field][:, 4]
         subhalo_bh_count = subhalo_data['SubhaloLenType'][:, 5] # number of BHs in each subhalo
-        halo_data = gc.loadHalos(basepath, snap, fields=['GroupFirstSub'])
-        first_subs = halo_data['GroupFirstSub']
+        first_subs = gc.loadHalos(basepath, snap, fields=['GroupFirstSub'])
     else:
         snap = None
         n_groups = None
@@ -160,5 +164,6 @@ def generate_mass_data_parallel(redshift, total_mass=False, verbose=False):
 
 
 if __name__ == '__main__':
-    redshift = 0
-    generate_mass_data_parallel(redshift=redshift, total_mass=False, verbose=False)
+    redshifts = [0, 2, 4]
+    for redshift in redshifts:
+        generate_mass_data_parallel(redshift=redshift, total_mass=True, verbose=False)
