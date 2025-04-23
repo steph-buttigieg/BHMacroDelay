@@ -3,6 +3,11 @@ This script investigates the mass relation between the stellar mass and the cent
 Data is saved to a text file and the mass_relation.ipynb notebook is used to plot the data.
 
 This script requires access to the full FABLE snapshots.
+
+------------------------------------------------------------------------------------------------
+
+Stephanie Buttigieg (sb2583@cam.ac.uk)
+
 """
 import utils as util 
 import numpy as np

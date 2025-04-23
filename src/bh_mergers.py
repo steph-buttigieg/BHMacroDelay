@@ -1,3 +1,21 @@
+"""
+Utility functions related to black hole mergers and black hole particles.
+
+---------------------------------------------------------------
+
+get_correct_mass() gets the (approximate) mass of a black hole at a given scale factor using the BH details files.
+This is to correct for incorrect BH masses in the merger files.
+
+get_bh_group_subhalo_nr() gets the group and subhalo number of a black hole in a given snapshot.
+
+MergerEvent is a class that stores the details of a merger event.
+
+---------------------------------------------------------------
+
+Stephanie Buttigieg (sb2583@cam.ac.uk)
+
+"""
+
 import numpy as np
 import h5py
 import illustris_python.snapshot as snapshot
@@ -9,6 +27,20 @@ LITTLE_H = 0.679
 basepath = '/cosma7/data/dp012/dc-bigw2/FABLE-NewICs/FABLE-newICs-100'
 
 def get_correct_mass(BH_id, scale_factor):
+    """
+    Get the mass of a black hole at a given scale factor using the BH details files.
+    This is to correct for incorrect BH masses in the merger files.
+    Parameters
+    ----------
+    BH_id : int
+        ID of the black hole.
+    scale_factor : float
+        Scale factor at which to get the mass.
+    Returns
+    -------
+    float
+        Mass of the black hole at the given scale factor in solar masses.
+    """
     mass_file_path = '/cosma7/data/dp012/dc-butt3/bh_masses.hdf5' # modify this as required
     with h5py.File(mass_file_path, 'r') as hf:
         data = np.array(hf[f'{int(BH_id)}'])
@@ -46,10 +78,6 @@ class MergerEvent():
             id of the most massive black hole
         id2 : int
             id of the second black hole
-        mass1 : float
-            mass of the most massive black hole
-        mass2 : float
-            mass of the second black hole
 
         """
         mass1 = get_correct_mass(id1, a) # in solar masses already.
@@ -96,18 +124,18 @@ class MergerEvent():
         """
         Get the binary separation of the black holes.
 
-        Parameters
-        ----------
-        bh_ids : dict
-            dictionary with key equal to the index of the galaxy and value equal to a tuple containing the the IDs of the black holes and the Hsml
         """
         bh_data = snapshot.loadSubset(basepath, self.snap_no, 5, fields=['ParticleIDs', 'BH_Hsml'])
         bh_ids = bh_data['ParticleIDs']
-        index = np.where(bh_ids == self.id1)[0][0]
-        scale_factors = util.get_scale_factors()
-        a = scale_factors[self.snap_no]
-        hsml1 = bh_data['BH_Hsml'][index]*u.kpc*a/LITTLE_H
-        self.binary_separation = hsml1
+        if self.id1 not in bh_ids:
+            self.binary_separation = -1*u.kpc
+        else:
+            index = np.where(bh_ids == self.id1)[0][0]
+            scale_factors = util.get_scale_factors()
+            a = scale_factors[self.snap_no]
+            hsml1 = bh_data['BH_Hsml'][index]*u.kpc*a/LITTLE_H
+            self.binary_separation = hsml1
+        
 
 def get_bh_group_subhalo_nr(bh_id, snap):
     """
@@ -124,7 +152,7 @@ def get_bh_group_subhalo_nr(bh_id, snap):
     -------
     tuple
         Group number and subhalo number of the black hole.
-        These are equal to -1 if the black hole is in the snapshot but not in the group or subhalo.
+        These are equal to -1 if the black hole is in the snapshot but not in a group or subhalo.
         And are equal to None if the black hole is not in the snapshot.
     """
     BH_ids = snapshot.loadSubset(basePath=basepath, snapNum=snap, partType=5, fields='ParticleIDs')
