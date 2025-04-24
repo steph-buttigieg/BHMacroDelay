@@ -285,7 +285,7 @@ def get_delays_only(verbose = False):
 
     It generates text files with the following format:
     id1, id2, m1, m2, formation_z, galaxy_merger_z, merge_by_now, host_distance
-    
+
     where id1 and id2 are the IDs of the two black holes, m1 and m2 are their masses,
     formation_z is the redshift at which the merger event happens in the simulation, galaxy_merger_z is the redshift at which the host galaxies merged,
     merge_by_now is a boolean indicating whether the merger happened before redshift 0, and host_distance is the distance between the two galaxies in the snapshot before their merger.
@@ -303,7 +303,7 @@ def get_delays_only(verbose = False):
     size = comm.Get_size()
 
     mergers_path = '/cosma7/data/dp012/dc-butt3/new_merger_events_extended' # change as required
-    path_to_files = '../data/new_delay_data/'
+    path_to_files = '../data/generated_data/delay_data/'
 
     if rank == 0:
         indices_processed = []

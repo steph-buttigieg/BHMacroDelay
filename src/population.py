@@ -66,11 +66,11 @@ def generate_mass_data_serial(redshift, total_mass = False, verbose=False):
     host_masses = host_masses[mask]
 
     # write bh_masses and host_masses to a text file
-    np.savetxt(f'../data/bh_masses_{snap}_serial.txt', bh_masses)
+    np.savetxt(f'../data/generated_data/bh_masses_{snap}_serial.txt', bh_masses)
     if not total_mass:
-        np.savetxt(f'../data/host_masses_{snap}_serial.txt', host_masses)
+        np.savetxt(f'../data/generated_data/host_masses_{snap}_serial.txt', host_masses)
     else:
-        np.savetxt(f'../data/host_masses_total_{snap}_serial.txt', host_masses)
+        np.savetxt(f'../data/generated_data/host_masses_total_{snap}_serial.txt', host_masses)
 
 def generate_mass_data_parallel(redshift, total_mass=False, verbose=False):
     """
@@ -156,11 +156,11 @@ def generate_mass_data_parallel(redshift, total_mass=False, verbose=False):
         host_masses = host_masses[mask]
 
         # Save to file
-        np.savetxt(f'../data/bh_masses_{snap}.txt', bh_masses)
+        np.savetxt(f'../data/generated_data/bh_masses_{snap}.txt', bh_masses)
         if not total_mass:
-            np.savetxt(f'../data/host_masses_{snap}.txt', host_masses)
+            np.savetxt(f'../data/generated_data/host_masses_{snap}.txt', host_masses)
         else:
-            np.savetxt(f'../data/host_masses_total_{snap}.txt', host_masses)
+            np.savetxt(f'../data/generated_data/host_masses_total_{snap}.txt', host_masses)
 
 
 if __name__ == '__main__':

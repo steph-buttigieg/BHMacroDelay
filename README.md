@@ -1,4 +1,9 @@
-This package processes BH mergers in the cosmological simulation FABLE (link to data repository of FABLE ideally) and generates macrophysical time delays according to the method described in Buttigieg et al. (2025) (link to paper). Note that the package is still in development and does not currently implement the full functionality.
+This package processes BH mergers in the cosmological simulation FABLE \([Henden et al. 2018,](http://dx.doi.org/10.1093/mnras/sty1780) [2019,](http://dx.doi.org/10.1093/mnras/stz2301) [2020](http://dx.doi.org/10.1093/mnras/staa2235) \) which employs the Arepo code \([Springel 2010;](http://dx.doi.org/10.1111/j.1365-2966.2009.15715.x) [Pakmor et al. 2015](http://dx.doi.org/10.1093/mnras/stv2380)\).
+It generates macrophysical time delays according to the method described in Buttigieg et al. (2025) (link to paper). Note that the package is still in development and does not currently implement the full functionality intended.
+
+Note that the FABLE data is currently not publicly available through a web server, but is available upon request. However, the BH merger data can be found in the fable_merger_files directory. With slight modifications, these scripts can also be used to analyse BH mergers in the Illustris simulation. 
+
+ Author: [Stephanie Buttigieg](sb2583@cam.ac.uk)
 
 # Installation Guide
 
