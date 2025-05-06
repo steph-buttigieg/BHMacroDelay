@@ -1,5 +1,5 @@
 # Ignore
-data/generate_data*
+data/generated_data*
 figures/*
 slurm_output/*
 

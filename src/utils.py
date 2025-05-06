@@ -20,7 +20,7 @@ def get_scale_factors():
     scale_factors : numpy.ndarray
         Array of scale factors.
     """
-    path_to_expansion_list = '/cosma/home/dp012/dc-butt3/BHMacroDelay/data/expansion_list.txt' # modify this as required
+    path_to_expansion_list = '/cosma/home/dp012/dc-butt3/BHMacroDelay/data/required_data/expansion_list.txt' # modify this as required
     scale_factors = []
     with open(path_to_expansion_list, 'r') as f:
         for line in f:

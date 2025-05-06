@@ -15,6 +15,12 @@ from astropy.cosmology import FlatLambdaCDM
 import os
 import utils as util
 from mpi4py import MPI
+from scipy.interpolate import interp1d
+import astropy.constants as const
+import astropy.units as u
+from scipy.spatial import cKDTree
+import illustris_python.snapshot as snapshot
+from scipy.integrate import solve_ivp
 
 LITTLE_H = 0.679
 DM_MASS = 3.4e7 / LITTLE_H
@@ -23,6 +29,7 @@ STELLAR_MASS = 6.4e6/LITTLE_H
 
 basepath = '/cosma7/data/dp012/dc-bigw2/FABLE-NewICs/FABLE-newICs-100'
 path_to_extended_merger_files = '/cosma7/data/dp012/dc-butt3/new_merger_events_extended' # change as required
+treedir = '/cosma7/data/dp012/dc-butt3/MergerTrees/output/Galaxies/FABLE/Fid_test' # path to subhalo merger trees
 
 def periodic_distance(pos1, pos2, box_size=1e5):
     """
@@ -139,7 +146,6 @@ def process_one(merger_index, verbose = False):
     if total_mass_1 < 100*STELLAR_MASS and total_mass_2 < 100*STELLAR_MASS:
         return None, None, None, None, None
     
-    treedir = '/cosma7/data/dp012/dc-butt3/MergerTrees/output/Galaxies/FABLE/Fid_test' # path to subhalo merger trees
     tree = readtreeHDF5.TreeDB(treedir)
 
     # Ensuring that both host subhalos have a valid subfindID
@@ -365,5 +371,439 @@ def get_delays_only(verbose = False):
                 f.write(str(id1) + ' ' + str(id2) + ' ' + str(m1) + ' ' + str(m2) + ' ' + str(formation_z) +' ' + str(galaxy_merger_redshift) + ' ' + str(merge_by_now) + ' ' + str(host_distance) + '\n')
 
 
+def get_masses_after_delay(merger_index, initial_m1, initial_m2, verbose = False):
+    """
+    Calculate the masses of the black holes after the macrophysical time delay.
+    This is done by loading gas properties around the host subhalo position and calculating the accretion rate.
+    The method outputs a detailed file for each merger event with the following format:
+
+    BH_1 information:
+    snap_number, mass, accretion_rate
+
+    BH_2 information:
+    snap_number, mass, accretion_rate
+
+    If the accretion rate cannot be calculated, the accretion rate is set to -1.
+
+
+    Parameters
+    ----------
+    merger_index : str
+        The index of the merger event to process in the format 'id1_id2'.
+    initial_m1 : float
+        The initial mass of the first black hole in solar masses.
+    initial_m2 : float
+        The initial mass of the second black hole in solar masses.
+    verbose : bool, optional
+        If True, print progress messages. The default is False.
+    Returns
+    -------
+    initial_m1 : float
+        The mass of the first black hole after the time delay in solar masses.
+    initial_m2 : float
+        The mass of the second black hole after the time delay in solar masses.
+    """
+    path_to_detailed_output = '/cosma7/data/dp012/dc-butt3/accretion_details' # where detailed output files will be stored
+    path_to_results = os.path.join(path_to_detailed_output, f'{merger_index}.txt')
+
+    # check whether folder exists
+    if not os.path.exists(path_to_detailed_output):
+        os.makedirs(path_to_detailed_output)
+    
+    # load pressure threshold data to apply the same criteria as in the simulation
+    pressure_file_path = os.path.join(basepath, 'bh_pressure_threshold.txt')
+    data = np.loadtxt(pressure_file_path)
+    m_bh = data[:,2]*1e10/LITTLE_H
+    ref_press = data[:,3]
+    log_m_bh = np.log10(m_bh)
+    log_ref_press = np.log10(ref_press)
+    interp_log_ref_press = interp1d(log_m_bh, log_ref_press, kind='linear', fill_value='extrapolate')
+
+    def get_ref_press(m_bh):
+        log_m_bh = np.log10(m_bh)
+        log_ref_press = interp_log_ref_press(log_m_bh)
+        return 10**log_ref_press
+    
+    # get macrophysical delay information
+    galaxy_z, galaxy_merger_snap, _, _, initial_snap = process_one(merger_index)
+
+    if galaxy_merger_snap == -1:
+        # this happens when I have a time delay exactly equal to 0, so I don't need to calculate accretion.
+
+        with open(path_to_results, 'w') as f:
+            f.write(f'{galaxy_z} {initial_m1} -1 \n')
+            f.write('\n')
+            f.write(f'{galaxy_z} {initial_m2} -1 \n')
+
+        return initial_m1, initial_m2
+    
+    # load information from detailed merger files (generated using generate_merger_files.py) 
+    filename = f'{merger_index}.hdf5'
+    filepath = os.path.join(path_to_extended_merger_files, filename)
+    with h5py.File(filepath, 'r') as hf:
+        header = dict(hf['Header'].attrs.items())
+        snap_numbers_1 = np.array(hf['bh1']['SnapNum'])
+        snap_numbers_2 = np.array(hf['bh2']['SnapNum'])
+        group_number_1 = np.array(hf['bh1']['Group_Number'])
+        group_number_2 = np.array(hf['bh2']['Group_Number'])
+        snap_before_BH_merger = snap_numbers_1[0]
+        subfind_id_1 = np.array(hf['bh1']['SubfindID'])
+        subfind_id_2 = np.array(hf['bh2']['SubfindID'])
+        BH_mass_1 = header['m1']
+        BH_mass_2 = header['m2']
+        time_of_numerical_merger = header['formation_scale_factor']
+        z_numerical_merger = 1/time_of_numerical_merger -1
+
+    if snap_before_BH_merger == galaxy_merger_snap: # don't have any data to calculate accretion.
+
+        with open(path_to_results, 'w') as f:
+            f.write(f'{galaxy_z} {initial_m1} -1 \n')
+            f.write('\n')
+            f.write(f'{galaxy_z} {initial_m2} -1 \n')
+
+        return BH_mass_1, BH_mass_2
+    
+    if z_numerical_merger < galaxy_z:
+
+        with open(path_to_results, 'w') as f:
+            f.write(f'{galaxy_z} {initial_m1} -1 \n')
+            f.write('\n')
+            f.write(f'{galaxy_z} {initial_m2} -1 \n')
+            
+        return BH_mass_1, BH_mass_2
+    
+    subfind_id_1 = dict(zip(snap_numbers_1, subfind_id_1))
+    subfind_id_2 = dict(zip(snap_numbers_2, subfind_id_2))
+    group_number_1 = dict(zip(snap_numbers_1, group_number_1))
+    group_number_2 = dict(zip(snap_numbers_2, group_number_2))
+
+    initial_bh_mass_1 = initial_m1
+    initial_bh_mass_2 = initial_m2
+
+    if verbose:
+        print('Initial BH mass 1 = ', initial_bh_mass_1)
+        print('Initial BH mass 2 = ', initial_bh_mass_2)
+
+    scale_factors = util.get_scale_factors()
+
+    # load information about the host galaxies from the subhalo merger trees.
+    tree = readtreeHDF5.TreeDB(treedir)
+    subhalo_quants = ['SubhaloGrNr', 'SubhaloPos', 'SnapNum', 'SubfindID', 'SubhaloVmax']
+
+    subfindID1 = subfind_id_1[initial_snap]
+    subfindID2 = subfind_id_2[initial_snap]
+
+    past_branch1 = tree.get_main_branch(initial_snap, subfindID1, keysel=subhalo_quants)
+    fut_branch1 = tree.get_future_branch(initial_snap, subfindID1, keysel=subhalo_quants)
+
+    past_branch2 = tree.get_main_branch(initial_snap, subfindID2, keysel=subhalo_quants)
+    fut_branch2 = tree.get_future_branch(initial_snap, subfindID2, keysel=subhalo_quants)
+
+    for b,branch in enumerate([past_branch1, fut_branch1]):
+        snaps = branch.SnapNum
+        host1_pos = branch.SubhaloPos 
+        subfind_id1 = branch.SubfindID
+        group_number1 = branch.SubhaloGrNr
+        if b>0:
+            pos_dict_future = dict(zip(snaps, host1_pos))
+            subfind_dict_future1 = dict(zip(snaps, subfind_id1))
+            group_number_dict_future1 = dict(zip(snaps, group_number1))
+            pos_dict_combined1 = {**pos_dict_past, **pos_dict_future}
+            subfind_dict_combined1 = {**subfind_dict_past1, **subfind_dict_future1}
+            group_number_dict_combined1 = {**group_number_dict_past1, **group_number_dict_future1}
+        else:
+            pos_dict_past = dict(zip(snaps, host1_pos))
+            subfind_dict_past1 = dict(zip(snaps, subfind_id1))
+            group_number_dict_past1 = dict(zip(snaps, group_number1))
+
+        for b,branch in enumerate([past_branch2, fut_branch2]):
+            snaps = branch.SnapNum
+            host2_pos = branch.SubhaloPos
+            subfind_id2 = branch.SubfindID
+            group_number2 = branch.SubhaloGrNr
+            if b>0:
+                pos_dict_future = dict(zip(snaps, host2_pos))
+                subfind_dict_future2 = dict(zip(snaps, subfind_id2))
+                group_number_dict_future2 = dict(zip(snaps, group_number2))
+                pos_dict_combined2 = {**pos_dict_past, **pos_dict_future}
+                subfind_dict_combined2 = {**subfind_dict_past2, **subfind_dict_future2}
+                group_number_dict_combined2 = {**group_number_dict_past2, **group_number_dict_future2}
+            else:
+                pos_dict_past = dict(zip(snaps, host2_pos))
+                subfind_dict_past2 = dict(zip(snaps, subfind_id2))
+                group_number_dict_past2 = dict(zip(snaps, group_number2))
+
+    def get_cs_T(internal_energy, e_abundance):
+        """ Calculates the sound speed and temperature from the internal energy and electron abundance."""
+        gamma = 5/3 # adiabatic index
+        X_H = 0.76 # hydrogen mass fraction
+        internal_energy = internal_energy * (u.km/u.s)**2
+        mu = 4 * const.m_p/(1+3*X_H + 4*X_H*e_abundance) # mean molecular weight
+        # convert internal energy to temperature
+        T = internal_energy*(gamma-1)*mu/const.k_B
+        # get sound speed
+        c_s = np.sqrt(gamma*const.k_B*T/(mu))
+        return c_s.to(u.km/u.s), T.to(u.K)
+
+    def get_gas_data(snap, subhalo_pos, group_number):
+        """ Loads gas data from the host halo around the host subhalo position and calculates the sound speed, density and pressure."""
+        halo_data = snapshot.loadHalo(basepath, snap, group_number, partType = 0, fields = ['Coordinates', 'Masses', 'InternalEnergy', 'ElectronAbundance', 'Density'])
+        if 'Coordinates' not in halo_data:
+            # if there is no gas in the halo, return 0 for sound speed, density and pressure
+            return 0, 0, 0
+        gas_coordinates = halo_data['Coordinates']
+        gas_masses = halo_data['Masses']
+        gas_internal_energy = halo_data['InternalEnergy']
+        gas_e_abundance = halo_data['ElectronAbundance']
+        gas_density = halo_data['Density']
+        number_of_neighbours = 32 # number of neighbours to use for the calculation of the sound speed
+        if len(gas_coordinates) < number_of_neighbours:
+            # in this case I just assume that the gas density is not high enough for the BH to accrete.
+            return 0, 0, 0
+        tree = cKDTree(gas_coordinates, boxsize = 100000)
+        _, indices = tree.query(subhalo_pos, k=number_of_neighbours)
+        chosen_gas_masses = gas_masses[indices]
+        chosen_gas_internal_energy = gas_internal_energy[indices]
+        chosen_gas_e_abundance = gas_e_abundance[indices]
+        chosen_gas_density = gas_density[indices]
+        c_s, _ = get_cs_T(chosen_gas_internal_energy, chosen_gas_e_abundance) # in km/s
+
+        # calculate the mass-weighted average c_s
+        c_s = np.sum(chosen_gas_masses*c_s)/np.sum(chosen_gas_masses)
+
+        rho = np.sum(chosen_gas_masses*chosen_gas_density)/np.sum(chosen_gas_masses)
+
+        gamma = 5/3
+        average_u = np.sum(chosen_gas_masses*chosen_gas_internal_energy)/np.sum(chosen_gas_masses)
+        pressure = (gamma-1)*rho*average_u
+
+        return c_s.value, rho, pressure # rho is in code units
+    
+    def get_data_for_snap(snap, snap_before_BH_merger, galaxy_merger_snap, subfind_dict, group_dict, pos_dict, verbose=False):
+        """Retrieve data for a given snap"""
+        if snap in subfind_dict:
+            new_snap = snap
+        elif snap == snap_before_BH_merger:
+            # Search backward until I find a valid snap
+            new_snap = snap
+            while new_snap not in subfind_dict:
+                new_snap -= 1
+        elif snap == galaxy_merger_snap:
+            # Search forward
+            new_snap = snap
+            while new_snap not in subfind_dict and new_snap < 135:
+                new_snap += 1
+            if new_snap == 135 and new_snap not in subfind_dict:
+                return 0, 0, 0, new_snap
+        else:
+            # if it is an 'internal' snap but is not in the dictionary we can skip this snap and then interpolate
+            return None  
+
+        group_number = group_dict[new_snap]
+        host_pos = pos_dict[new_snap]
+        c_s, rho, pressure = get_gas_data(new_snap, host_pos, group_number)
+        return c_s, rho, pressure, new_snap
+
+    if verbose:
+        print('Last snap to load: ', galaxy_merger_snap)
+
+    sound_speeds1 = []
+    sound_speeds2 = []
+    snaps1 = []
+    snaps2 = []
+    densities1 = []
+    densities2 = []
+    bh_pressure_1 = []
+    bh_pressure_2 = []
+
+    for snap in range(snap_before_BH_merger, galaxy_merger_snap + 1):
+        if verbose:
+            print('Loading snap', snap)
+
+        # Subhalo 1
+        result1 = get_data_for_snap(snap, snap_before_BH_merger, galaxy_merger_snap,
+                                    subfind_dict_combined1, group_number_dict_combined1, pos_dict_combined1, verbose)
+        if result1:
+            c_s1, rho1, pressure1, used_snap1 = result1
+            sound_speeds1.append(c_s1)
+            densities1.append(rho1)
+            bh_pressure_1.append(pressure1)
+            snaps1.append(used_snap1)
+
+        # Subhalo 2
+        result2 = get_data_for_snap(snap, snap_before_BH_merger, galaxy_merger_snap,
+                                    subfind_dict_combined2, group_number_dict_combined2, pos_dict_combined2, verbose)
+        if result2:
+            c_s2, rho2, pressure2, used_snap2 = result2
+            sound_speeds2.append(c_s2)
+            densities2.append(rho2)
+            bh_pressure_2.append(pressure2)
+            snaps2.append(used_snap2)
+
+        if verbose and result1 and result2:
+            print('c_s1:', c_s1, 'c_s2:', c_s2)
+            print('rho1:', rho1, 'rho2:', rho2)
+            print('pressure1:', pressure1, 'pressure2:', pressure2)
+
+    sound_speeds1 = np.array(sound_speeds1)
+    sound_speeds2 = np.array(sound_speeds2)
+    no_gas_1 = np.all(sound_speeds1 == 0)
+    no_gas_2 = np.all(sound_speeds2 == 0)
+
+    def get_interpolated_value(t, quantity, times):
+        """Interpolate the log of a quantity, fallback to linear if result is NaN
+        Used to interpolate the sound speed, density and pressure between snapshots."""
+        log_interp = interp1d(times, np.log10(quantity), kind='linear', fill_value='extrapolate')
+        result = log_interp(t)
+        if np.isnan(result):
+            linear_interp = interp1d(times, quantity, kind='linear', fill_value='extrapolate')
+            return linear_interp(t)
+        return 10**result
+    
+    def rate_of_change(t, M_BH):
+        """Compute BH mass accretion rate using Bondi or Eddington limit."""
+        t *= u.Gyr
+        M_BH *= u.Msun
+        epsilon_r = 0.1
+
+        density = get_interpolated_value(t, densities, time_at_snaps) * u.Msun / u.pc**3
+        c_s = get_interpolated_value(t, sound_speeds, time_at_snaps) * u.km / u.s
+
+        if c_s == 0 or density == 0:
+            return [0]
+
+        p_ext = get_interpolated_value(t, pressures, time_at_snaps)
+        p_ref = get_ref_press(M_BH.value)
+        pre_factor = (p_ext / p_ref)**2 if p_ext < p_ref else 1
+
+        bondi = 4 * 100 * np.pi * const.G**2 * M_BH**2 * density / c_s**3 * pre_factor
+        edd = 4 * np.pi * const.G * M_BH * const.m_p / (0.1 * const.sigma_T * const.c)
+
+        acc_rate = min(bondi, edd)
+        return acc_rate.to(u.Msun / u.Gyr).value * (1 - epsilon_r)
+    
+    def evolve_bh_mass(initial_mass, dens, cs, press, timesnaps):
+        """Evolve BH mass over time and return masses and accretion rates at snapshots."""
+        global densities, sound_speeds, pressures, time_at_snaps
+        densities, sound_speeds, pressures, time_at_snaps = dens, cs, press, timesnaps
+
+        t_span = [0, time_at_snaps[-1]]
+        t_eval = np.clip(np.logspace(np.log10(t_span[0] + 1e-9), np.log10(t_span[1] - 1e-9), 1000), *t_span)
+
+        solution = solve_ivp(rate_of_change, t_span=t_span, y0=[initial_mass], t_eval=t_eval)
+        interp_mass = interp1d(solution.t, solution.y[0], kind='linear', bounds_error=False, fill_value="extrapolate")
+        masses = interp_mass(time_at_snaps)
+        rates = [rate_of_change(t, [m])[0] for t, m in zip(time_at_snaps, masses)]
+        return masses, rates, solution.y[0][-1]
+
+    # Cosmology setup
+    H0 = LITTLE_H * 100
+    cosmo = FlatLambdaCDM(H0=H0, Om0=0.3065)
+    age_at_merger = cosmo.age(1 / time_of_numerical_merger - 1).value
+
+    # Time at snapshots in relation to the numerical merger.
+    def get_time_at_snaps(snaps):
+        z = 1 / scale_factors[snaps] - 1
+        return cosmo.age(z).value - age_at_merger
+
+    time_at_snaps1 = get_time_at_snaps(snaps1)
+    time_at_snaps2 = get_time_at_snaps(snaps2)
+
+    # BH 1 evolution
+    if not no_gas_1:
+        masses_at_snaps1, rates_at_snaps1, final_m1 = evolve_bh_mass(initial_bh_mass_1, densities1, sound_speeds1, bh_pressure_1, time_at_snaps1)
+    else:
+        final_m1 = initial_bh_mass_1
+        masses_at_snaps1 = [final_m1] * len(time_at_snaps1)
+        rates_at_snaps1 = [0] * len(time_at_snaps1)
+
+    # BH 2 evolution
+    if not no_gas_2:
+        masses_at_snaps2, rates_at_snaps2, final_m2 = evolve_bh_mass(initial_bh_mass_2, densities2, sound_speeds2, bh_pressure_2, time_at_snaps2)
+    else:
+        final_m2 = initial_bh_mass_2
+        masses_at_snaps2 = [final_m2] * len(time_at_snaps2)
+        rates_at_snaps2 = [0] * len(time_at_snaps2)
+
+    if verbose:
+        print('Final BH mass 1 =', final_m1)
+        print('Final BH mass 2 =', final_m2)
+
+    with open(path_to_results, 'w') as f:
+        for i,snap in enumerate(snaps1):
+            f.write(f'{snap} {masses_at_snaps1[i]} {rates_at_snaps1[i]} \n')
+        f.write('\n')
+        for i,snap in enumerate(snaps2):
+            f.write(f'{snap} {masses_at_snaps2[i]} {rates_at_snaps2[i]} \n')
+
+    return final_m1, final_m2
+
+def calculate_accretion(verbose=False):
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+
+    already_processed_events = []
+
+    delay_path = '../data/generated_data/delay_data'
+    accretion_path = '/cosma7/data/dp012/dc-butt3/accretion_details_new'
+    if rank == 0:
+        events_to_process = []
+        # get all the events that have already been processed
+        files = os.listdir(accretion_path)
+        for file in files:
+            index = file.split('.')[0]
+            already_processed_events.append(index)
+        # get all the file names
+        files = os.listdir(delay_path)
+        for file in files:
+            with open(os.path.join(delay_path, file), 'r') as f:
+                lines = f.readlines()
+                for line in lines:
+                    data = line.split()
+                    index1 = int(data[0])
+                    index2 = int(data[1])
+                    m1 = float(data[2])
+                    m2 = float(data[3])
+                    bh_z = float(data[4])
+                    galaxy_z = float(data[5])
+                    merged = data[6]
+                    host_separation = data[7]
+                    merger_index = f'{index1}_{index2}'
+                    if merger_index not in already_processed_events:
+                        events_to_process.append([merger_index, m1, m2, bh_z, galaxy_z, merged])
+        chunks = np.array_split(events_to_process, size)
+    else:
+        chunks = None
+
+    local_events = comm.scatter(chunks, root=0)
+    local_indices = []
+    local_data_1 = []
+    local_data_2 = []
+    local_data_3 = []
+    local_data_4 = []
+    local_data_5 = []
+
+    for event in local_events:
+        local_indices.append(event[0])
+        local_data_1.append(event[1])
+        local_data_2.append(event[2])
+        local_data_3.append(event[3])
+        local_data_4.append(event[4])
+        local_data_5.append(event[5])
+
+    for i, index in enumerate(local_indices):
+        if verbose:
+            print('Rank {} Processing merger {}'.format(rank, index))
+        try:
+            initial_m1 = float(local_data_1[i])
+            initial_m2 = float(local_data_2[i])
+            print('Initial masses:', initial_m1, initial_m2)
+            m1_acc, m2_acc = get_masses_after_delay(index, initial_m1, initial_m2, verbose=True)
+        except Exception as e:
+            print('Error processing merger:', index)
+            print(e)
+
+
 if __name__ == "__main__":
-    get_delays_only(verbose=True)
+    calculate_accretion(verbose=False)

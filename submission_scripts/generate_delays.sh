@@ -1,13 +1,13 @@
 #!/bin/bash -l 
 
-#SBATCH --nodes=1
+#SBATCH --nodes=4
 #SBATCH --ntasks-per-node=28
 #SBATCH -J generate_files
 #SBATCH -o ../slurm_output/delays.out
 #SBATCH -e ../slurm_output/delays.err
 #SBATCH -p cosma7
 #SBATCH -A dp379
-#SBATCH -t 0:15:00
+#SBATCH -t 3:00:00
 #SBATCH --mail-type=BEGIN,END,FAIL # notifications for job done & fail
 #SBATCH --mail-user=sb2583@cam.ac.uk
 
